@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>弓道部 班シフト管理</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; background: #f5f0e8; color: #2c2c2c; min-height: 100vh; }
+    header { background: #3d2b1f; color: #f5e6c8; padding: 16px 20px; text-align: center; }
+    header h1 { font-size: 1.4rem; letter-spacing: 0.1em; }
+    header p { font-size: 0.8rem; color: #c9b99a; margin-top: 4px; }
+    .container { max-width: 720px; margin: 0 auto; padding: 20px 16px; }
+
+    .section { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
+    .section-title { font-size: 0.85rem; font-weight: bold; color: #7a5c3e; letter-spacing: 0.08em; margin-bottom: 12px; border-bottom: 2px solid #e8d9c4; padding-bottom: 6px; }
+
+    /* 設定 */
+    .config-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+    .config-row label { font-size: 0.9rem; min-width: 160px; }
+    .num-input {
+      width: 60px; padding: 5px 8px; border: 1px solid #c8b89a; border-radius: 6px;
+      font-size: 0.95rem; text-align: center; background: #faf7f2;
+    }
+    .group-names { display: flex; gap: 8px; flex-wrap: wrap; }
+    .group-input { width: 62px; padding: 4px 6px; border: 1px solid #c8b89a; border-radius: 6px; font-size: 0.85rem; text-align: center; background: #faf7f2; }
+    .note { font-size: 0.78rem; color: #888; margin-top: 6px; }
+    .highlight { background: #fff3cd; border-radius: 4px; padding: 1px 4px; }
+
+    /* ボタン */
+    .btn { display: inline-block; padding: 11px 24px; border: none; border-radius: 8px; font-size: 0.95rem; cursor: pointer; font-family: inherit; transition: transform .1s, opacity .1s; }
+    .btn:active { transform: scale(.97); opacity: .9; }
+    .btn-primary { background: #3d2b1f; color: #f5e6c8; }
+    .btn-secondary { background: #e8d9c4; color: #4a3520; font-size: 0.85rem; padding: 8px 16px; }
+    .btn-danger { background: #fde8e8; color: #c00; font-size: 0.8rem; padding: 6px 14px; }
+    .btn-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+
+    /* シフトカード（準備・片付け） */
+    .shift-row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .shift-card { flex: 1; min-width: 140px; border-radius: 10px; padding: 14px 12px; text-align: center; border: 2px solid transparent; }
+    .shift-card.junbi    { background: #fff8e7; border-color: #f0c040; }
+    .shift-card.kataduke { background: #edf7ed; border-color: #6abf6a; }
+    .shift-card .task-label { font-size: 0.8rem; font-weight: bold; letter-spacing: 0.06em; margin-bottom: 8px; }
+    .junbi .task-label    { color: #8a6a00; }
+    .kataduke .task-label { color: #2a7a2a; }
+    .group-badges { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+
+    .badge { padding: 5px 12px; border-radius: 20px; font-size: 0.95rem; font-weight: bold; color: #fff; }
+    .badge-sm { padding: 3px 9px; font-size: 0.78rem; font-weight: bold; color: #fff; border-radius: 16px; }
+
+    /* 鋳込み組み合わせ */
+    .mato-grid { display: flex; gap: 10px; flex-wrap: wrap; }
+    .mato-card {
+      flex: 0 0 auto;
+      background: #edf3ff;
+      border: 2px solid #7aabf0;
+      border-radius: 10px;
+      padding: 12px 14px;
+      text-align: center;
+      min-width: 100px;
+    }
+    .mato-card .mato-label { font-size: 0.75rem; font-weight: bold; color: #2a5aaa; margin-bottom: 6px; }
+
+    .empty-state { text-align: center; color: #aaa; font-size: 0.9rem; padding: 24px 0; }
+
+    /* 累計 */
+    .stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+    @media(max-width: 480px) { .stats-grid { grid-template-columns: repeat(3, 1fr); } }
+    .stat-item { text-align: center; }
+    .stat-item .stat-name { font-size: 0.72rem; font-weight: bold; margin-bottom: 4px; }
+    .stat-bar-wrap { height: 56px; background: #f0ebe3; border-radius: 4px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+    .stat-bar { border-radius: 4px 4px 0 0; transition: height .3s; min-height: 4px; }
+    .stat-item .stat-count { font-size: 0.82rem; font-weight: bold; margin-top: 3px; }
+
+    /* ペア累計 */
+    .pair-table-wrap { overflow-x: auto; margin-top: 10px; }
+    .pair-table { border-collapse: collapse; font-size: 0.78rem; width: 100%; }
+    .pair-table th, .pair-table td { border: 1px solid #e4dbd0; padding: 4px 6px; text-align: center; }
+    .pair-table th { background: #f5efe6; }
+    .pair-table td.self { background: #f0ebe3; color: #ccc; }
+    .pair-table td.low  { background: #e8f4e8; }
+    .pair-table td.high { background: #fdecea; }
+
+    details summary { cursor: pointer; user-select: none; font-size: 0.85rem; color: #7a5c3e; margin-top: 10px; }
+
+    /* 履歴 */
+    .history-list { max-height: 280px; overflow-y: auto; }
+    .history-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f0e8dc; font-size: 0.8rem; }
+    .history-item:last-child { border-bottom: none; }
+    .history-date { color: #888; min-width: 95px; font-size: 0.75rem; padding-top: 2px; }
+    .history-detail { flex: 1; line-height: 1.8; }
+    .ht-label { font-weight: bold; margin-right: 4px; }
+    .history-del { margin-left: auto; cursor: pointer; color: #bbb; font-size: 1.1rem; background: none; border: none; padding: 0 4px; }
+    .history-del:hover { color: #c00; }
+    .no-history { color: #aaa; font-size: 0.85rem; text-align: center; padding: 16px 0; }
+
+    .divider { border: none; border-top: 1px solid #e8ddd0; margin: 12px 0; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>弓道部 班シフト管理</h1>
+  <p>準備・鋳込み練習・片付けの班割りをバランスよくランダム生成</p>
+</header>
+<div class="container">
+
+  <!-- 設定 -->
+  <div class="section">
+    <div class="section-title">設定</div>
+    <div class="config-row">
+      <label>班の名前</label>
+      <div class="group-names" id="groupNameInputs"></div>
+    </div>
+    <hr class="divider">
+    <div class="config-row">
+      <label>準備 ― 担当する班の数</label>
+      <input type="number" class="num-input" id="countJunbi" min="1" max="6" value="2">
+      <span style="font-size:.85rem;color:#888">班</span>
+    </div>
+    <div class="config-row">
+      <label>片付け ― 担当する班の数</label>
+      <input type="number" class="num-input" id="countKataduke" min="1" max="6" value="2">
+      <span style="font-size:.85rem;color:#888">班</span>
+    </div>
+    <p class="note" id="shiftConfigNote"></p>
+    <hr class="divider">
+    <div class="config-row">
+      <label>鋳込み練習 ― 1的あたりの班の数</label>
+      <input type="number" class="num-input" id="countMato" min="1" max="6" value="2">
+      <span style="font-size:.85rem;color:#888">班で1的</span>
+    </div>
+    <p class="note" id="matoConfigNote"></p>
+  </div>
+
+  <!-- 生成・保存ボタン -->
+  <div class="btn-row">
+    <button class="btn btn-primary" onclick="generateAll()">シフトを生成</button>
+    <button class="btn btn-secondary" id="btnSave" onclick="saveAll()">今回のシフトを保存</button>
+  </div>
+
+  <!-- 準備・片付け -->
+  <div class="section">
+    <div class="section-title">準備・片付け 担当班</div>
+    <div id="shiftDisplay">
+      <div class="empty-state">「シフトを生成」ボタンを押してください</div>
+    </div>
+    <p class="note" id="shiftNote" style="margin-top:8px;"></p>
+  </div>
+
+  <!-- 鋳込み練習 -->
+  <div class="section">
+    <div class="section-title">鋳込み練習 ― 的の組み合わせ（全6班）</div>
+    <div id="matoDisplay">
+      <div class="empty-state">「シフトを生成」ボタンを押してください</div>
+    </div>
+  </div>
+
+  <!-- 累計 -->
+  <div class="section">
+    <div class="section-title">累計担当回数（準備・片付け）</div>
+    <div class="stats-grid" id="statsGrid"></div>
+    <details>
+      <summary>作業別の内訳を見る</summary>
+      <div style="margin-top:10px;" id="taskStatsTable"></div>
+    </details>
+    <hr class="divider">
+    <div class="section-title" style="margin-top:4px;">鋳込み練習 ― ペア累計（何回同じ的を使ったか）</div>
+    <div class="pair-table-wrap" id="pairTable"></div>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-danger" onclick="resetStats()">累計をすべてリセット</button>
+    </div>
+  </div>
+
+  <!-- 履歴 -->
+  <div class="section">
+    <div class="section-title">履歴</div>
+    <div class="history-list" id="historyList"></div>
+  </div>
+
+</div>
+<script>
+// ================================================================
+//  定数・データ
+// ================================================================
+const STORAGE_KEY = 'kyudo_shift_v3';
+const GROUP_COLORS = ['#e01060','#e6600d','#c49000','#2d9e2d','#1a7fc1','#7b4fc9'];
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return {
+    groups: ['1班','2班','3班','4班','5班','6班'],
+    counts: {},          // 準備・片付け累計
+    taskCounts: { junbi: {}, kataduke: {} },
+    pairCounts: {},      // 鋳込みペア累計 "A|B" -> number
+    history: []
+  };
+}
+function saveData(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
+
+let appData = loadData();
+let currentShift = null;   // { junbi:[], kataduke:[] }
+let currentMato  = null;   // [ [班,班], [班,班], ... ]
+
+// ================================================================
+//  初期化
+// ================================================================
+function init() {
+  const container = document.getElementById('groupNameInputs');
+  container.innerHTML = '';
+  appData.groups.forEach((name, i) => {
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.className = 'group-input'; inp.value = name;
+    inp.addEventListener('change', () => {
+      appData.groups[i] = inp.value || `${i+1}班`;
+      saveData(appData);
+      renderStats(); renderPairTable(); renderHistory();
+    });
+    container.appendChild(inp);
+  });
+
+  ensureCounts();
+  renderStats(); renderPairTable(); renderHistory();
+  updateNotes();
+
+  ['countJunbi','countKataduke','countMato'].forEach(id =>
+    document.getElementById(id).addEventListener('input', updateNotes)
+  );
+}
+
+function ensureCounts() {
+  appData.groups.forEach(g => {
+    if (!(g in appData.counts)) appData.counts[g] = 0;
+    ['junbi','kataduke'].forEach(k => {
+      if (!appData.taskCounts[k]) appData.taskCounts[k] = {};
+      if (!(g in appData.taskCounts[k])) appData.taskCounts[k][g] = 0;
+    });
+  });
+  if (!appData.pairCounts) appData.pairCounts = {};
+}
+
+function getVal(id) { return Math.max(1, Math.min(6, parseInt(document.getElementById(id).value) || 1)); }
+
+function updateNotes() {
+  const n  = appData.groups.length;
+  const cj = getVal('countJunbi');
+  const ck = getVal('countKataduke');
+  const cm = getVal('countMato');
+  const total = cj + ck;
+  const note = document.getElementById('shiftConfigNote');
+  if (total === n) {
+    note.innerHTML = `合計 <span class="highlight">${total}班</span> ― 全${n}班が1作業ずつ担当（最も公平）`;
+    note.style.color = '#2a7a2a';
+  } else if (total < n) {
+    note.innerHTML = `合計 <span class="highlight">${total}班</span> ― ${n-total}班は今回お休み`;
+    note.style.color = '#888';
+  } else {
+    note.innerHTML = `合計 <span class="highlight">${total}班</span> ― ${total-n}班が2作業担当`;
+    note.style.color = '#c07000';
+  }
+  const matoNote = document.getElementById('matoConfigNote');
+  if (n % cm === 0) {
+    matoNote.innerHTML = `全${n}班を <span class="highlight">${cm}班×${n/cm}的</span> に分けます`;
+    matoNote.style.color = '#2a7a2a';
+  } else {
+    const full = Math.floor(n / cm);
+    const rem  = n % cm;
+    matoNote.innerHTML = `${cm}班×${full}的 + 残り${rem}班で1的（合計${full+1}的）`;
+    matoNote.style.color = '#c07000';
+  }
+}
+
+// ================================================================
+//  重み付きシャッフル
+// ================================================================
+function weightedShuffle(groups, counts) {
+  const vals = groups.map(g => counts[g] || 0);
+  const minC = Math.min(...vals);
+  const maxC = Math.max(...vals);
+  const range = maxC - minC + 1;
+  const pool  = groups.map((g, i) => ({ g, w: range - vals[i] + minC }));
+  const result = [];
+  while (pool.length) {
+    const totalW = pool.reduce((s, x) => s + x.w, 0);
+    let r = Math.random() * totalW, idx = pool.length - 1;
+    for (let i = 0; i < pool.length; i++) { r -= pool[i].w; if (r <= 0) { idx = i; break; } }
+    result.push(pool[idx].g);
+    pool.splice(idx, 1);
+  }
+  return result;
+}
+
+// ================================================================
+//  組み合わせ列挙
+// ================================================================
+function combinations(arr, k) {
+  if (k === 0) return [[]];
+  if (arr.length < k) return [];
+  const [first, ...rest] = arr;
+  return [
+    ...combinations(rest, k-1).map(c => [first, ...c]),
+    ...combinations(rest, k)
+  ];
+}
+
+// arr を size ずつのグループに分割する全パターンを列挙
+function allPartitions(arr, size) {
+  if (arr.length === 0) return [[]];
+  const first = arr[0];
+  const rest  = arr.slice(1);
+  const results = [];
+  for (const combo of combinations(rest, size - 1)) {
+    const group     = [first, ...combo];
+    const remaining = rest.filter(x => !combo.includes(x));
+    for (const sub of allPartitions(remaining, size)) {
+      results.push([group, ...sub]);
+    }
+  }
+  return results;
+}
+
+function pairKey(a, b) {
+  return [a, b].sort().join('|');
+}
+
+// パーティションのペアスコア（累計が少いほど良い）
+function scorePartition(partition) {
+  let s = 0;
+  for (const grp of partition) {
+    for (let i = 0; i < grp.length; i++)
+      for (let j = i+1; j < grp.length; j++)
+        s += appData.pairCounts[pairKey(grp[i], grp[j])] || 0;
+  }
+  return s;
+}
+
+// ================================================================
+//  鋳込み組み合わせ生成
+// ================================================================
+function generateMato(size) {
+  const groups = [...appData.groups];
+  const n = groups.length;
+
+  if (n % size === 0) {
+    // きれいに割り切れる場合: 全パーティションを列挙して重み選択
+    const partitions = allPartitions(groups, size);
+    if (partitions.length === 0) return [groups]; // fallback
+
+    // スコアが低い(=あまり一緒になっていない)ほど高確率で選ぶ
+    const maxScore = Math.max(...partitions.map(scorePartition));
+    const weighted = partitions.map(p => ({ p, w: maxScore - scorePartition(p) + 1 }));
+    const totalW   = weighted.reduce((s, x) => s + x.w, 0);
+    let r = Math.random() * totalW;
+    for (const { p, w } of weighted) { r -= w; if (r <= 0) return p; }
+    return weighted[weighted.length - 1].p;
+  } else {
+    // 割り切れない場合: size 班ずつ greedy に組む、余りは最後にまとめる
+    const shuffled = weightedShuffle(groups, appData.pairCounts);
+    const result = [];
+    let i = 0;
+    while (i < n) {
+      result.push(shuffled.slice(i, Math.min(i + size, n)));
+      i += size;
+    }
+    return result;
+  }
+}
+
+// ================================================================
+//  シフト生成（準備・片付け）
+// ================================================================
+function generateShift() {
+  ensureCounts();
+  const cj = getVal('countJunbi');
+  const ck = getVal('countKataduke');
+  const shuffled = weightedShuffle([...appData.groups], appData.counts);
+  let pos = 0;
+  const junbi    = shuffled.slice(pos, pos + cj); pos += cj;
+  const kataduke = shuffled.slice(pos, pos + ck);
+  return { junbi, kataduke };
+}
+
+// ================================================================
+//  メイン生成
+// ================================================================
+function generateAll() {
+  ensureCounts();
+  currentShift = generateShift();
+  currentMato  = generateMato(getVal('countMato'));
+  renderShift(currentShift);
+  renderMato(currentMato);
+}
+
+// ================================================================
+//  レンダリング
+// ================================================================
+function badge(g, sm) {
+  const ci = appData.groups.indexOf(g);
+  const color = GROUP_COLORS[ci % GROUP_COLORS.length];
+  const cls = sm ? 'badge-sm' : 'badge';
+  return `<span class="${cls}" style="background:${color}">${escHtml(g)}</span>`;
+}
+
+function renderShift(shift) {
+  const el = document.getElementById('shiftDisplay');
+  const cards = [
+    { key: 'junbi',    label: '準備',   cls: 'junbi'    },
+    { key: 'kataduke', label: '片付け', cls: 'kataduke' },
+  ].map(t => {
+    const badges = (shift[t.key] || []).map(g => badge(g, false)).join('');
+    return `<div class="shift-card ${t.cls}">
+      <div class="task-label">${t.label}</div>
+      <div class="group-badges">${badges || '<span style="color:#aaa;font-size:.8rem">なし</span>'}</div>
+    </div>`;
+  }).join('');
+  el.innerHTML = `<div class="shift-row">${cards}</div>`;
+
+  const all    = [...shift.junbi, ...shift.kataduke];
+  const unique = new Set(all);
+  const note   = document.getElementById('shiftNote');
+  if (unique.size === appData.groups.length) {
+    note.textContent = 'すべての班が1作業ずつ担当します。'; note.style.color = '#2a7a2a';
+  } else {
+    const absent = appData.groups.filter(g => !unique.has(g));
+    const dup    = appData.groups.filter(g => all.filter(x=>x===g).length > 1);
+    let msg = '';
+    if (absent.length) msg += `今回お休み: ${absent.join('・')}　`;
+    if (dup.length)    msg += `2作業担当: ${dup.join('・')}`;
+    note.textContent = msg; note.style.color = '#c07000';
+  }
+}
+
+function renderMato(mato) {
+  const el = document.getElementById('matoDisplay');
+  const cards = mato.map((grp, i) => {
+    const badges = grp.map(g => badge(g, false)).join('');
+    return `<div class="mato-card">
+      <div class="mato-label">的 ${i+1}</div>
+      <div class="group-badges" style="gap:5px;">${badges}</div>
+    </div>`;
+  }).join('');
+  el.innerHTML = `<div class="mato-grid">${cards}</div>`;
+}
+
+// ================================================================
+//  保存
+// ================================================================
+function saveAll() {
+  if (!currentShift || !currentMato) { alert('先にシフトを生成してください'); return; }
+  ensureCounts();
+
+  // 準備・片付けカウント
+  currentShift.junbi.forEach(g => {
+    appData.counts[g] = (appData.counts[g]||0) + 1;
+    appData.taskCounts.junbi[g] = (appData.taskCounts.junbi[g]||0) + 1;
+  });
+  currentShift.kataduke.forEach(g => {
+    appData.counts[g] = (appData.counts[g]||0) + 1;
+    appData.taskCounts.kataduke[g] = (appData.taskCounts.kataduke[g]||0) + 1;
+  });
+
+  // ペアカウント
+  for (const grp of currentMato) {
+    for (let i = 0; i < grp.length; i++)
+      for (let j = i+1; j < grp.length; j++) {
+        const k = pairKey(grp[i], grp[j]);
+        appData.pairCounts[k] = (appData.pairCounts[k]||0) + 1;
+      }
+  }
+
+  // 履歴
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  appData.history.unshift({
+    date: dateStr,
+    shift: JSON.parse(JSON.stringify(currentShift)),
+    mato:  JSON.parse(JSON.stringify(currentMato)),
+  });
+
+  saveData(appData);
+  renderStats(); renderPairTable(); renderHistory();
+
+  const btn = document.getElementById('btnSave');
+  const orig = btn.textContent;
+  btn.textContent = '保存しました！'; btn.style.background = '#2d9e2d'; btn.style.color = '#fff';
+  setTimeout(() => { btn.textContent = orig; btn.style.background = ''; btn.style.color = ''; }, 1500);
+}
+
+// ================================================================
+//  累計表示
+// ================================================================
+function renderStats() {
+  const grid = document.getElementById('statsGrid');
+  const maxC = Math.max(1, ...appData.groups.map(g => appData.counts[g]||0));
+  grid.innerHTML = appData.groups.map((g, i) => {
+    const c = appData.counts[g]||0;
+    const color = GROUP_COLORS[i % GROUP_COLORS.length];
+    return `<div class="stat-item">
+      <div class="stat-name" style="color:${color}">${escHtml(g)}</div>
+      <div class="stat-bar-wrap">
+        <div class="stat-bar" style="height:${Math.round(c/maxC*100)}%;background:${color}"></div>
+      </div>
+      <div class="stat-count">${c}回</div>
+    </div>`;
+  }).join('');
+
+  const tasks = [
+    { key:'junbi', label:'準備' },
+    { key:'kataduke', label:'片付け' },
+  ];
+  const hdr  = `<tr><th>班</th>${tasks.map(t=>`<th>${t.label}</th>`).join('')}<th>合計</th></tr>`;
+  const rows = appData.groups.map((g, i) => {
+    const color = GROUP_COLORS[i % GROUP_COLORS.length];
+    const cells = tasks.map(t => `<td>${(appData.taskCounts[t.key]||{})[g]||0}</td>`).join('');
+    return `<tr><td style="font-weight:bold;color:${color}">${escHtml(g)}</td>${cells}<td><b>${appData.counts[g]||0}</b></td></tr>`;
+  }).join('');
+  document.getElementById('taskStatsTable').innerHTML =
+    `<table style="width:100%;font-size:.8rem;border-collapse:collapse;">${hdr}${rows}</table>`;
+}
+
+function renderPairTable() {
+  const gs = appData.groups;
+  const vals = [];
+  for (let i = 0; i < gs.length; i++)
+    for (let j = i+1; j < gs.length; j++)
+      vals.push(appData.pairCounts[pairKey(gs[i], gs[j])]||0);
+  const maxV = Math.max(1, ...vals);
+  const minV = Math.min(...vals);
+
+  const hdr = `<tr><th></th>${gs.map((g,i)=>`<th style="color:${GROUP_COLORS[i%GROUP_COLORS.length]}">${escHtml(g)}</th>`).join('')}</tr>`;
+  const rows = gs.map((ga, i) => {
+    const cells = gs.map((gb, j) => {
+      if (i === j) return `<td class="self">-</td>`;
+      if (j < i)   return `<td class="self"></td>`;
+      const v = appData.pairCounts[pairKey(ga,gb)]||0;
+      const cls = v === minV ? 'low' : (v === maxV && maxV > minV ? 'high' : '');
+      return `<td class="${cls}">${v}</td>`;
+    }).join('');
+    return `<tr><th style="color:${GROUP_COLORS[i%GROUP_COLORS.length]}">${escHtml(ga)}</th>${cells}</tr>`;
+  }).join('');
+
+  document.getElementById('pairTable').innerHTML =
+    `<table class="pair-table">${hdr}${rows}</table>
+     <p style="font-size:.72rem;color:#888;margin-top:5px;">緑=少ない 赤=多い（上三角のみ表示）</p>`;
+}
+
+// ================================================================
+//  履歴
+// ================================================================
+function renderHistory() {
+  const el = document.getElementById('historyList');
+  if (!appData.history.length) {
+    el.innerHTML = '<div class="no-history">保存された履歴はありません</div>'; return;
+  }
+  el.innerHTML = appData.history.map((h, idx) => {
+    const junbiBadges    = (h.shift.junbi||[]).map(g=>badge(g,true)).join(' ');
+    const katadukeBadges = (h.shift.kataduke||[]).map(g=>badge(g,true)).join(' ');
+    const matoBadges = (h.mato||[]).map((grp,i) =>
+      `<span style="margin-right:6px;"><span class="ht-label">的${i+1}</span>${grp.map(g=>badge(g,true)).join('')}</span>`
+    ).join('');
+    return `<div class="history-item">
+      <div class="history-date">${h.date}</div>
+      <div class="history-detail">
+        <span class="ht-label">準備</span>${junbiBadges}&nbsp;&nbsp;
+        <span class="ht-label">片付け</span>${katadukeBadges}<br>
+        <span class="ht-label" style="color:#2a5aaa">鋳込み</span>${matoBadges}
+      </div>
+      <button class="history-del" onclick="deleteHistory(${idx})">×</button>
+    </div>`;
+  }).join('');
+}
+
+function deleteHistory(idx) {
+  if (!confirm('この履歴を削除しますか？\n（累計カウントには反映されません）')) return;
+  appData.history.splice(idx, 1);
+  saveData(appData); renderHistory();
+}
+
+function resetStats() {
+  if (!confirm('累計担当回数・ペア累計・履歴をすべてリセットしますか？')) return;
+  appData.counts = {}; appData.taskCounts = { junbi:{}, kataduke:{} };
+  appData.pairCounts = {}; appData.history = [];
+  ensureCounts(); saveData(appData);
+  renderStats(); renderPairTable(); renderHistory();
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+init();
+</script>
+</body>
+</html>
