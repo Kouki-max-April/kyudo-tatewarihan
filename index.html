@@ -10,6 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="班シフト">
   <link rel="apple-touch-icon" href="icon.svg">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; background: #f5f0e8; color: #2c2c2c; min-height: 100vh; }
@@ -191,29 +192,54 @@
 const STORAGE_KEY = 'kyudo_shift_v3';
 const GROUP_COLORS = ['#e01060','#e6600d','#c49000','#2d9e2d','#1a7fc1','#7b4fc9'];
 
-function loadData() {
+// Supabase 設定（ダッシュボードの Project Settings > API から取得）
+const SUPABASE_URL  = 'https://dnowncucevcnqpcrzmcz.supabase.co';
+const SUPABASE_ANON = 'sb_publishable_J8W6cIxBybJ6EGXYhFQs6g_e6Q47A25';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+const DEFAULT_DATA = () => ({
+  groups: ['1班','2班','3班','4班','5班','6班'],
+  counts: {},
+  taskCounts: { junbi: {}, kataduke: {} },
+  pairCounts: {},
+  history: []
+});
+
+async function loadData() {
+  try {
+    const { data, error } = await sb
+      .from('kyudo_shift_state')
+      .select('data')
+      .eq('id', 'main')
+      .single();
+    if (!error && data?.data) return data.data;
+  } catch(e) {}
+  // Supabase から取得できなければ localStorage から移行
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
   } catch(e) {}
-  return {
-    groups: ['1班','2班','3班','4班','5班','6班'],
-    counts: {},          // 準備・片付け累計
-    taskCounts: { junbi: {}, kataduke: {} },
-    pairCounts: {},      // 鋳込みペア累計 "A|B" -> number
-    history: []
-  };
+  return DEFAULT_DATA();
 }
-function saveData(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
 
-let appData = loadData();
+function saveData(d) {
+  // ローカルにも保存（オフライン時のフォールバック）
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+  // Supabase に非同期保存（fire-and-forget）
+  sb.from('kyudo_shift_state')
+    .upsert({ id: 'main', data: d, updated_at: new Date().toISOString() })
+    .then(({ error }) => { if (error) console.error('Supabase save error:', error); });
+}
+
+let appData = DEFAULT_DATA();
 let currentShift = null;   // { junbi:[], kataduke:[] }
 let currentMato  = null;   // [ [班,班], [班,班], ... ]
 
 // ================================================================
 //  初期化
 // ================================================================
-function init() {
+async function init() {
+  appData = await loadData();
   const container = document.getElementById('groupNameInputs');
   container.innerHTML = '';
   appData.groups.forEach((name, i) => {
@@ -375,16 +401,41 @@ function generateMato(size) {
 }
 
 // ================================================================
+//  優先度シャッフル（累計最小優先、同数内はランダム）
+// ================================================================
+function priorityShuffle(groups, counts) {
+  // 同数グループ内のランダム性を確保するため先にシャッフル
+  const arr = [...groups].sort(() => Math.random() - 0.5);
+  // 累計昇順でソート（同数はシャッフル済みの順を維持＝安定ソート）
+  arr.sort((a, b) => (counts[a] || 0) - (counts[b] || 0));
+  return arr;
+}
+
+// ================================================================
 //  シフト生成（準備・片付け）
 // ================================================================
 function generateShift() {
   ensureCounts();
   const cj = getVal('countJunbi');
   const ck = getVal('countKataduke');
-  const shuffled = weightedShuffle([...appData.groups], appData.counts);
-  let pos = 0;
-  const junbi    = shuffled.slice(pos, pos + cj); pos += cj;
-  const kataduke = shuffled.slice(pos, pos + ck);
+
+  // 準備: junbi累計が少ない班を優先
+  const junbiOrder = priorityShuffle([...appData.groups], appData.taskCounts.junbi);
+  const junbi = junbiOrder.slice(0, cj);
+
+  // 片付け: kataduke累計が少ない班を優先、準備担当班は除外
+  const nonJunbi = appData.groups.filter(g => !junbi.includes(g));
+  const katadukeCandidates = priorityShuffle(nonJunbi, appData.taskCounts.kataduke);
+
+  let kataduke;
+  if (katadukeCandidates.length >= ck) {
+    kataduke = katadukeCandidates.slice(0, ck);
+  } else {
+    // 残りが足りない場合（準備+片付け > 班数）は準備班も追加
+    const overflow = priorityShuffle(junbi, appData.taskCounts.kataduke);
+    kataduke = [...katadukeCandidates, ...overflow].slice(0, ck);
+  }
+
   return { junbi, kataduke };
 }
 
